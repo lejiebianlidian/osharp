@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 //  <copyright file="TypeExtensions.cs" company="OSharp开源团队">
 //      Copyright (c) 2014-2015 OSharp. All rights reserved.
 //  </copyright>
@@ -46,7 +46,7 @@ namespace OSharp.Reflection
             Check.NotNull(type, nameof(type));
             Check.NotNull(baseType, nameof(baseType));
 
-            return type.IsClass && (!canAbstract && !type.IsAbstract) && type.IsBaseOn(baseType);
+            return type.IsClass && (canAbstract || !type.IsAbstract) && type.IsBaseOn(baseType);
         }
 
         /// <summary>
@@ -56,7 +56,7 @@ namespace OSharp.Reflection
         /// <returns> 是返回True，不是返回False </returns>
         public static bool IsNullableType(this Type type)
         {
-            return ((type != null) && type.IsGenericType) && (type.GetGenericTypeDefinition() == typeof(Nullable<>));
+            return type != null && type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>);
         }
 
         /// <summary>
@@ -66,11 +66,7 @@ namespace OSharp.Reflection
         /// <returns> </returns>
         public static Type GetNonNullableType(this Type type)
         {
-            if (IsNullableType(type))
-            {
-                return type.GetGenericArguments()[0];
-            }
-            return type;
+            return IsNullableType(type) ? type.GetGenericArguments()[0] : type;
         }
 
         /// <summary>
@@ -251,6 +247,30 @@ namespace OSharp.Reflection
         {
             Type baseType = typeof(TBaseType);
             return type.IsBaseOn(baseType);
+        }
+
+        /// <summary>
+        /// 返回当前方法信息是否是重写方法
+        /// </summary>
+        /// <param name="method">要判断的方法信息</param>
+        /// <returns>是否是重写方法</returns>
+        public static bool IsOverridden(this MethodInfo method)
+        {
+            return method.GetBaseDefinition().DeclaringType != method.DeclaringType;
+        }
+
+        /// <summary>
+        /// 返回当前属性信息是否为virtual
+        /// </summary>
+        public static bool IsVirtual(this PropertyInfo property)
+        {
+            var accessor = property.GetAccessors().FirstOrDefault();
+            if (accessor == null)
+            {
+                return false;
+            }
+
+            return accessor.IsVirtual && !accessor.IsFinal;
         }
 
         /// <summary>

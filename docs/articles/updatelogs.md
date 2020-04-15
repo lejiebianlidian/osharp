@@ -1,5 +1,76 @@
 # OSharp .NetStandard 更新记录
 
+### 3.1.1 (2020/01/31)
+1. (core) 更新.net core 版本到 3.1.1
+2. (identity) 将Identity模块的 UserRole，UserClaim，UserLogin，UserToken 的主键类型开放为泛型
+
+### 3.1.0-beta01 (2020/01/20)
+1. (core) 过滤掉EntityInfo中属性信息的导航属性和逻辑删除属性
+2. (core) 添加NonFunctionAttribute特性，用于忽略指定Controller和Action是否收集成Function信息
+3. (core) 调整项目文件中.netstandard公共配置信息的位置
+4. (core) 修复启动时提取function信息时override方法会被重复提取的问题
+5. (core) 修复appsettings.json文件读取辅助类不能读取的问题
+6. (core) 综合.net core 2.2和.net core 3.0分支，只使用一份代码管理2.2与3.0项目的代码。使用多目标框架的项目组织方式，更新项目工程文件，统一管理 .netstandard2.0, .netcoreapp2.2, .netcoreapp3.0 的目标框架代码
+7. (dependency) 修复当有多个接口并且允许多注入时，仍以单注入方式来注入服务的问题
+8. (dependency) ServiceLocator 添加 ExecuteScopedWork，用于在根ServiceProvider新建Scope作用域执行业务
+9. (mapper) 将IMapTuple服务允许多注入
+10. (http) 添加HTTP通信加密的客户端拦截器与服务端中间件支持
+11. (http) Http通信内容解密时，无加密标记的内容不解密，添加HTTP通信加密解密测试
+12. (http) 添加HttpClient的Json相关扩展方法
+13. (web) MvcPackBase添加Cors重写点，方便实现Cors
+14. (web)SignalR增加Development环境下开启详细错误
+15. (pack) 将部分Pack由Web项目下调至框架类库级别，需要更改时可在Web工程继承重写
+16. (entity) 重命名Repository的重要API：Query -> QueryAsNoTracking，TrackQuery -> Query，重命名之后更符合EF语义，减少误用机率 [#113](https://github.com/i66soft/osharp/issues/113)
+17. (wpf) 添加OSharp.Wpf工程，用于封装.net core 3.0版本的WPF客户端辅助功能
+18. (wpf) 将HubManager更改为抽象类，以方便在应用时按需重写，SignalR的客户端与服务商通信均可支持强类型了，优化HubClient的实现
+19. (wpf) 使用SignalR内部对象整理HubClientBase
+20. (identity) JWT登录添加不同客户端来源(ClientType)的支持
+21. (identity) 修复几个应该用Query却用了QueryAsNoTracking的问题
+22. (infos) 添加信息模块的站内信的生成基础代码
+23. (msg) 重写添加站内信的处理逻辑
+24. (health) 添加新项目 OSharp.AspNetCore.Diagnostics，用于AspNetCore项目的性能诊断，完善HealthChecks检测对象，补充Database/Smtp/Redis/Hangfire的检测
+25. (alain) 修复st-component-base.ts中 ResponseDataProcess调用不正确的问题
+26. (alain) 添加 Powered by 的 .net core和osharp版本显示
+27. (alain) 移动angular前端项目到samples/web，移除多余的示例项目代码
+
+### 1.1.3 (2019/09/06)
+1. (repository) 修复用户未登录时CreatorId赋值为0的问题，应赋值为null
+2. (repository) 修复CreatedTime 有真实值时（不为默认值）时依然赋予当前时间的问题
+3. (log)新增新的NLog日志记录支持
+4. (log) 修复OSharp.NLog项目加载不正确的问题
+5. (identity) 在刷新token之后，添加刷新权限点、用户信息、菜单等
+6. (security) 修复角色、用户读取功能翻页不正确的问题
+7. (alain) OSharpTSColumn添加filterIndex配置项，用于配置关联数据的查询字段路径
+8. (alain) 修复上一发布版本中列表页搜索未关联动作的问题
+9.  (alain)：修复由于interceptor顺序不对导致AccessToken失效时尽管刷新Token成功依然会跳转到登录页的问题
+10. (alain) 在前端显示框架版本号
+11. 统一管理类库公共信息，并区分.netstandard和.netcoreapp
+
+### 1.1.0 (2019/08/23)
+1. (core)：修复OperationResult.ToAjaxResult() 丢失 Data 的问题
+2. (core)：添加OperationResult.ToAjaxResult()的object类型Data转强类型委托处理的支持
+3. (core)：OperationResult.ToAjaxResult() 添加是否包含服务层返回的Data的选项 [#85](https://github.com/i66soft/osharp/issues/85)
+4. (core)：Expression<Func<T, bool>> And/Or操作增加 if 表达式，以支持某些条件成立时才组合表达式
+5. (core)：FilterHelper数据查询功能新增对空数据值(null或空字符串)的部分支持 [#94](https://github.com/i66soft/osharp/issues/94)
+6. (core)：IsDeriveClassFrom方法canAbstract逻辑错误 [#101](https://github.com/i66soft/osharp/issues/101)
+7. (efcore)：bug修复：IEntityRegister.DbContextType如果既有Null又有DefaultDbContext，dict[typeof(DefaultDbContext)]会被覆盖掉。[#101](https://github.com/i66soft/osharp/issues/101)
+8. (efcore)：修复逻辑删除在批量删除时也会物理删除的问题，更改为调用更新逻辑来操作数据 [#103](https://github.com/i66soft/osharp/issues/103)
+9. (automapper)：AutoMapper升级到9.0 [#105](https://github.com/i66soft/osharp/issues/105)
+10. (identity)：移除OnlineUserCache相关代码，其功能在OnlineUserProvider中进行实现，移除OnlineUserJwtSecurityTokenHandler，基功能由新增的OnlineUserAuthorizationFilter实现，解决依赖注入的问题，部分Identity的基础类型由OSharp.Permissions工程转移到OSharp工程中
+11. (identity)：实现一个简单的JWT-Token刷新机制 [#87](https://github.com/i66soft/osharp/issues/87)
+12. (identity)：修复用户锁定字段名错误的问题
+13. (identity)：修复登录返回的Token有效时间不正确的问题
+14. (mvc)：添加新特性[AreaInfo]，用于代替 [Area] 添加区域信息，支持添加区域的Display中文显示 [#92](https://github.com/i66soft/osharp/issues/92)
+15. (mvc)：修复[UnitOfWork]特性中的一个执行逻辑错误：执行业务过程中抛出异常，数据库事务仍然会被提交 [#106](https://github.com/i66soft/osharp/issues/106)
+16. (alain)：修复 JWT的过期时间不准确，比现实差了8小时的问题 fixed [#95](https://github.com/i66soft/osharp/issues/95)
+17. (alain)：优化Token的刷新逻辑，刷新失败时移除本地RefreshToken
+18. (alain8)：添加ng-alain8脚手架代码
+19. (alain8)：添加基于HttpInterceptor的Token自动刷新功能 RefreshJWTInterceptor.ts
+20. (alain8)：去除角色功能/用户功能管理页面，将查看角色功能/用户功能的功能合并到角色/用户管理页面
+21. (alain8)：修复图标加载不正确的问题，菜单中缺失的图标，需要在style-icons.ts文件中进行手动添加，代码中的图标，可用npm run-script icon 命令自动生成到style-icons-auto.ts文件中
+22. (alain8)：ng-alain8基本迁移完成
+23. 删除ng-alain8之外其他没用的前端项目
+
 ### 1.0.1 (2019/05/15)
 1. (core)：修复系统初始化刷新实体信息时输出日志信息错误的问题 [#79](https://github.com/i66soft/osharp/issues/79)
 2. (core)：修复数据权限缓存中一个.First使用不当的问题

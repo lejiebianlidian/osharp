@@ -12,21 +12,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Security.Principal;
-using System.Threading;
 using System.Threading.Tasks;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+using OSharp.Authorization;
 using OSharp.Collections;
 using OSharp.Data;
 using OSharp.Exceptions;
 using OSharp.Extensions;
 using OSharp.Filter;
+using OSharp.Identity;
 using OSharp.Mapping;
-using OSharp.Security;
-using OSharp.Security.Claims;
 using OSharp.Threading;
 
 using Z.EntityFramework.Plus;
@@ -40,10 +39,10 @@ namespace OSharp.Entity
     /// <typeparam name="TEntity">实体类型</typeparam>
     /// <typeparam name="TKey">实体主键类型</typeparam>
     public class Repository<TEntity, TKey> : IRepository<TEntity, TKey>
-        where TEntity : class, IEntity<TKey>
+        where TEntity : class, IEntity<TKey>, new()
         where TKey : IEquatable<TKey>
     {
-        private readonly DbContext _dbContext;
+        private readonly IDbContext _dbContext;
         private readonly DbSet<TEntity> _dbSet;
         private readonly ILogger _logger;
         private readonly ICancellationTokenProvider _cancellationTokenProvider;
@@ -55,8 +54,8 @@ namespace OSharp.Entity
         public Repository(IServiceProvider serviceProvider)
         {
             UnitOfWork = serviceProvider.GetUnitOfWork<TEntity, TKey>();
-            _dbContext = (DbContext)UnitOfWork.GetDbContext<TEntity, TKey>();
-            _dbSet = _dbContext.Set<TEntity>();
+            _dbContext = UnitOfWork.GetDbContext<TEntity, TKey>();
+            _dbSet = ((DbContext)_dbContext).Set<TEntity>();
             _logger = serviceProvider.GetLogger<Repository<TEntity, TKey>>();
             _cancellationTokenProvider = serviceProvider.GetService<ICancellationTokenProvider>();
             _principal = serviceProvider.GetService<IPrincipal>();
@@ -103,6 +102,35 @@ namespace OSharp.Entity
             Check.NotNull(entities, nameof(entities));
             entities = CheckInsert(entities);
             _dbSet.AddRange(entities);
+            return _dbContext.SaveChanges();
+        }
+
+        /// <summary>
+        /// 插入或更新实体
+        /// </summary>
+        /// <param name="entities">要处理的实体</param>
+        /// <param name="existingFunc">实体是否存在的判断委托</param>
+        /// <returns>操作影响的行数</returns>
+        public virtual int InsertOrUpdate(TEntity[] entities, Func<TEntity, Expression<Func<TEntity, bool>>> existingFunc = null)
+        {
+            Check.NotNull(entities, nameof(entities));
+            foreach (TEntity entity in entities)
+            {
+                Expression<Func<TEntity, bool>> exp = existingFunc == null
+                    ? m => m.Id.Equals(entity.Id)
+                    : existingFunc(entity);
+                if (!_dbSet.Any(exp))
+                {
+                    CheckInsert(entity);
+                    _dbSet.Add(entity);
+                }
+                else
+                {
+                    CheckUpdate(entity);
+                    ((DbContext)_dbContext).Update<TEntity, TKey>(entity);
+                }
+            }
+
             return _dbContext.SaveChanges();
         }
 
@@ -240,8 +268,18 @@ namespace OSharp.Entity
         public virtual int DeleteBatch(Expression<Func<TEntity, bool>> predicate)
         {
             Check.NotNull(predicate, nameof(predicate));
+            // todo: 检测删除的数据权限
 
             ((DbContextBase)_dbContext).BeginOrUseTransaction();
+            if (typeof(ISoftDeletable).IsAssignableFrom(typeof(TEntity)))
+            {
+                // 逻辑删除
+                TEntity[] entities = _dbSet.Where(predicate).ToArray();
+                DeleteInternal(entities);
+                return _dbContext.SaveChanges();
+            }
+
+            //物理删除
             return _dbSet.Where(predicate).Delete();
         }
 
@@ -254,7 +292,7 @@ namespace OSharp.Entity
         {
             Check.NotNull(entities, nameof(entities));
             entities = CheckUpdate(entities);
-            _dbContext.Update<TEntity, TKey>(entities);
+            ((DbContext)_dbContext).Update<TEntity, TKey>(entities);
             return _dbContext.SaveChanges();
         }
 
@@ -291,7 +329,7 @@ namespace OSharp.Entity
                         entity = updateFunc(dto, entity);
                     }
                     entity = CheckUpdate(entity)[0];
-                    _dbContext.Update<TEntity, TKey>(entity);
+                    ((DbContext)_dbContext).Update<TEntity, TKey>(entity);
                 }
                 catch (OsharpException e)
                 {
@@ -334,11 +372,11 @@ namespace OSharp.Entity
         /// <param name="predicate">查询条件谓语表达式</param>
         /// <param name="id">编辑的实体标识</param>
         /// <returns>是否存在</returns>
-        public virtual bool CheckExists(Expression<Func<TEntity, bool>> predicate, TKey id = default(TKey))
+        public virtual bool CheckExists(Expression<Func<TEntity, bool>> predicate, TKey id = default)
         {
             Check.NotNull(predicate, nameof(predicate));
 
-            TKey defaultId = default(TKey);
+            TKey defaultId = default;
             var entity = _dbSet.Where(predicate).Select(m => new { m.Id }).FirstOrDefault();
             bool exists = !typeof(TKey).IsValueType && ReferenceEquals(id, null) || id.Equals(defaultId)
                 ? entity != null
@@ -378,16 +416,16 @@ namespace OSharp.Entity
         public TEntity GetFirst(Expression<Func<TEntity, bool>> predicate, bool filterByDataAuth)
         {
             Check.NotNull(predicate, nameof(predicate));
-            return TrackQuery(predicate, filterByDataAuth).FirstOrDefault();
+            return Query(predicate, filterByDataAuth).FirstOrDefault();
         }
 
         /// <summary>
         /// 获取<typeparamref name="TEntity"/>不跟踪数据更改（NoTracking）的查询数据源
         /// </summary>
         /// <returns>符合条件的数据集</returns>
-        public virtual IQueryable<TEntity> Query()
+        public virtual IQueryable<TEntity> QueryAsNoTracking()
         {
-            return Query(null, true);
+            return QueryAsNoTracking(null, true);
         }
 
         /// <summary>
@@ -395,9 +433,9 @@ namespace OSharp.Entity
         /// </summary>
         /// <param name="predicate">数据查询谓语表达式</param>
         /// <returns>符合条件的数据集</returns>
-        public virtual IQueryable<TEntity> Query(Expression<Func<TEntity, bool>> predicate)
+        public virtual IQueryable<TEntity> QueryAsNoTracking(Expression<Func<TEntity, bool>> predicate)
         {
-            return Query(predicate, true);
+            return QueryAsNoTracking(predicate, true);
         }
 
         /// <summary>
@@ -406,9 +444,9 @@ namespace OSharp.Entity
         /// <param name="predicate">数据过滤表达式</param>
         /// <param name="filterByDataAuth">是否使用数据权限过滤，数据权限一般用于存在用户实例的查询，系统查询不启用数据权限过滤</param>
         /// <returns>符合条件的数据集</returns>
-        public virtual IQueryable<TEntity> Query(Expression<Func<TEntity, bool>> predicate, bool filterByDataAuth)
+        public virtual IQueryable<TEntity> QueryAsNoTracking(Expression<Func<TEntity, bool>> predicate, bool filterByDataAuth)
         {
-            return TrackQuery(predicate, filterByDataAuth).AsNoTracking();
+            return Query(predicate, filterByDataAuth).AsNoTracking();
         }
 
         /// <summary>
@@ -416,18 +454,18 @@ namespace OSharp.Entity
         /// </summary>
         /// <param name="includePropertySelectors">要Include操作的属性表达式</param>
         /// <returns>符合条件的数据集</returns>
-        public virtual IQueryable<TEntity> Query(params Expression<Func<TEntity, object>>[] includePropertySelectors)
+        public virtual IQueryable<TEntity> QueryAsNoTracking(params Expression<Func<TEntity, object>>[] includePropertySelectors)
         {
-            return TrackQuery(includePropertySelectors).AsNoTracking();
+            return Query(includePropertySelectors).AsNoTracking();
         }
 
         /// <summary>
         /// 获取<typeparamref name="TEntity"/>跟踪数据更改（Tracking）的查询数据源
         /// </summary>
         /// <returns>符合条件的数据集</returns>
-        public virtual IQueryable<TEntity> TrackQuery()
+        public virtual IQueryable<TEntity> Query()
         {
-            return TrackQuery(null, true);
+            return Query(null, true);
         }
 
         /// <summary>
@@ -435,9 +473,9 @@ namespace OSharp.Entity
         /// </summary>
         /// <param name="predicate">数据过滤表达式</param>
         /// <returns>符合条件的数据集</returns>
-        public virtual IQueryable<TEntity> TrackQuery(Expression<Func<TEntity, bool>> predicate)
+        public virtual IQueryable<TEntity> Query(Expression<Func<TEntity, bool>> predicate)
         {
-            return TrackQuery(predicate, true);
+            return Query(predicate, true);
         }
 
         /// <summary>
@@ -446,7 +484,7 @@ namespace OSharp.Entity
         /// <param name="predicate">数据过滤表达式</param>
         /// <param name="filterByDataAuth">是否使用数据权限过滤，数据权限一般用于存在用户实例的查询，系统查询不启用数据权限过滤</param>
         /// <returns>符合条件的数据集</returns>
-        public IQueryable<TEntity> TrackQuery(Expression<Func<TEntity, bool>> predicate, bool filterByDataAuth)
+        public IQueryable<TEntity> Query(Expression<Func<TEntity, bool>> predicate, bool filterByDataAuth)
         {
             IQueryable<TEntity> query = _dbSet.AsQueryable();
             if (filterByDataAuth)
@@ -466,7 +504,7 @@ namespace OSharp.Entity
         /// </summary>
         /// <param name="includePropertySelectors">要Include操作的属性表达式</param>
         /// <returns>符合条件的数据集</returns>
-        public virtual IQueryable<TEntity> TrackQuery(params Expression<Func<TEntity, object>>[] includePropertySelectors)
+        public virtual IQueryable<TEntity> Query(params Expression<Func<TEntity, object>>[] includePropertySelectors)
         {
             IQueryable<TEntity> query = _dbSet.AsQueryable();
             if (includePropertySelectors == null || includePropertySelectors.Length == 0)
@@ -497,6 +535,35 @@ namespace OSharp.Entity
             entities = CheckInsert(entities);
             await _dbSet.AddRangeAsync(entities, _cancellationTokenProvider.Token);
             return await _dbContext.SaveChangesAsync(_cancellationTokenProvider.Token);
+        }
+
+        /// <summary>
+        /// 插入或更新实体
+        /// </summary>
+        /// <param name="entities">要处理的实体</param>
+        /// <param name="existingFunc">实体是否存在的判断委托</param>
+        /// <returns>操作影响的行数</returns>
+        public virtual async Task<int> InsertOrUpdateAsync(TEntity[] entities, Func<TEntity, Expression<Func<TEntity, bool>>> existingFunc = null)
+        {
+            Check.NotNull(entities, nameof(entities));
+            foreach (TEntity entity in entities)
+            {
+                Expression<Func<TEntity, bool>> exp = existingFunc == null
+                    ? m => m.Id.Equals(entity.Id)
+                    : existingFunc(entity);
+                if (!await _dbSet.AnyAsync(exp))
+                {
+                    CheckInsert(entity);
+                    await _dbSet.AddAsync(entity);
+                }
+                else
+                {
+                    CheckUpdate(entity);
+                    ((DbContext)_dbContext).Update<TEntity, TKey>(entity);
+                }
+            }
+
+            return await _dbContext.SaveChangesAsync();
         }
 
         /// <summary>
@@ -635,8 +702,18 @@ namespace OSharp.Entity
         public virtual async Task<int> DeleteBatchAsync(Expression<Func<TEntity, bool>> predicate)
         {
             Check.NotNull(predicate, nameof(predicate));
+            // todo: 检测删除的数据权限
 
             await ((DbContextBase)_dbContext).BeginOrUseTransactionAsync(_cancellationTokenProvider.Token);
+            if (typeof(ISoftDeletable).IsAssignableFrom(typeof(TEntity)))
+            {
+                // 逻辑删除
+                TEntity[] entities = _dbSet.Where(predicate).ToArray();
+                DeleteInternal(entities);
+                return await _dbContext.SaveChangesAsync(_cancellationTokenProvider.Token);
+            }
+
+            // 物理删除
             return await _dbSet.Where(predicate).DeleteAsync(_cancellationTokenProvider.Token);
         }
 
@@ -650,7 +727,7 @@ namespace OSharp.Entity
             Check.NotNull(entities, nameof(entities));
 
             entities = CheckUpdate(entities);
-            _dbContext.Update<TEntity, TKey>(entities);
+            ((DbContext)_dbContext).Update<TEntity, TKey>(entities);
             return await _dbContext.SaveChangesAsync(_cancellationTokenProvider.Token);
         }
 
@@ -686,7 +763,7 @@ namespace OSharp.Entity
                         entity = await updateFunc(dto, entity);
                     }
                     entity = CheckUpdate(entity)[0];
-                    _dbContext.Update<TEntity, TKey>(entity);
+                    ((DbContext)_dbContext).Update<TEntity, TKey>(entity);
                 }
                 catch (OsharpException e)
                 {
@@ -729,11 +806,11 @@ namespace OSharp.Entity
         /// <param name="predicate">查询条件谓语表达式</param>
         /// <param name="id">编辑的实体标识</param>
         /// <returns>是否存在</returns>
-        public virtual async Task<bool> CheckExistsAsync(Expression<Func<TEntity, bool>> predicate, TKey id = default(TKey))
+        public virtual async Task<bool> CheckExistsAsync(Expression<Func<TEntity, bool>> predicate, TKey id = default)
         {
             predicate.CheckNotNull(nameof(predicate));
 
-            TKey defaultId = default(TKey);
+            TKey defaultId = default;
             var entity = await _dbSet.Where(predicate).Select(m => new { m.Id }).FirstOrDefaultAsync(_cancellationTokenProvider.Token);
             bool exists = !typeof(TKey).IsValueType && ReferenceEquals(id, null) || id.Equals(defaultId)
                 ? entity != null
@@ -775,6 +852,22 @@ namespace OSharp.Entity
             {
                 ((Guid)key).CheckNotEmpty(keyName);
             }
+        }
+
+        private void SetEmptyGuidKey(TEntity entity)
+        {
+            if (typeof(TKey) != typeof(Guid))
+            {
+                return;
+            }
+
+            if (!entity.Id.Equals(Guid.Empty))
+            {
+                return;
+            }
+
+            DatabaseType databaseType = _dbContext.GetDatabaseType();
+            entity.Id = SequentialGuid.Create(databaseType).CastTo<TKey>();
         }
 
         private static string GetNameValue(object value)
@@ -820,9 +913,10 @@ namespace OSharp.Entity
             for (int i = 0; i < entities.Length; i++)
             {
                 TEntity entity = entities[i];
+                SetEmptyGuidKey(entity);
                 entities[i] = entity.CheckICreatedTime<TEntity, TKey>();
 
-                string userIdTypeName = _principal?.Identity.GetClaimValueFirstOrDefault("userIdTypeName");
+                string userIdTypeName = _principal?.Identity.GetClaimValueFirstOrDefault(OsharpConstants.UserIdTypeName);
                 if (userIdTypeName == null)
                 {
                     continue;
@@ -849,7 +943,7 @@ namespace OSharp.Entity
         {
             CheckDataAuth(DataAuthOperation.Update, entities);
 
-            string userIdTypeName = _principal?.Identity.GetClaimValueFirstOrDefault("userIdTypeName");
+            string userIdTypeName = _principal?.Identity.GetClaimValueFirstOrDefault(OsharpConstants.UserIdTypeName);
             if (userIdTypeName == null)
             {
                 return entities;

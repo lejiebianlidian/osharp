@@ -11,13 +11,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 
+using OSharp.Authorization;
 using OSharp.Collections;
 using OSharp.Exceptions;
 using OSharp.Extensions;
 using OSharp.Filter;
 using OSharp.Mapping;
 using OSharp.Reflection;
-using OSharp.Security;
 
 
 namespace OSharp.Entity
@@ -133,6 +133,8 @@ namespace OSharp.Entity
         /// 将数据源映射为指定<typeparamref name="TOutputDto"/>的集合，
         /// 并验证数据的<see cref="DataAuthOperation.Update"/>,<see cref="DataAuthOperation.Delete"/>数据权限状态
         /// </summary>
+        /// <param name="source">数据源</param>
+        /// <param name="getKey">是否应用于获取缓存键时</param>
         public static IQueryable<TOutputDto> ToOutput<TEntity, TOutputDto>(this IQueryable<TEntity> source, bool getKey = false)
         {
             if (!typeof(TOutputDto).IsBaseOn<IDataAuthEnabled>() || getKey)

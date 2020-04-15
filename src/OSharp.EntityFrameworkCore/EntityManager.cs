@@ -1,10 +1,10 @@
-﻿// -----------------------------------------------------------------------
-//  <copyright file="EntityRegisterManager.cs" company="OSharp开源团队">
+// -----------------------------------------------------------------------
+//  <copyright file="EntityManager.cs" company="OSharp开源团队">
 //      Copyright (c) 2014-2019 OSharp. All rights reserved.
 //  </copyright>
 //  <site>http://www.osharp.org</site>
-//  <last-editor>郭明锋</last-editor>
-//  <last-date>2019-03-08 3:07</last-date>
+//  <last-editor></last-editor>
+//  <last-date>2019-06-27 9:04</last-date>
 // -----------------------------------------------------------------------
 
 using System;
@@ -14,12 +14,10 @@ using System.Linq;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.Extensions.DependencyInjection;
 
+using OSharp.Authorization.EntityInfos;
+using OSharp.Authorization.Functions;
 using OSharp.Collections;
-using OSharp.Core.EntityInfos;
-using OSharp.Core.Functions;
-using OSharp.Dependency;
 using OSharp.Exceptions;
 using OSharp.Reflection;
 
@@ -29,7 +27,6 @@ namespace OSharp.Entity
     /// <summary>
     /// 实体管理器
     /// </summary>
-    [Dependency(ServiceLifetime.Singleton, TryAdd = true)]
     public class EntityManager : IEntityManager
     {
         private readonly ConcurrentDictionary<Type, IEntityRegister[]> _entityRegistersDict
@@ -64,20 +61,9 @@ namespace OSharp.Entity
             foreach (IGrouping<Type, IEntityRegister> group in groups)
             {
                 key = group.Key ?? typeof(DefaultDbContext);
-                List<IEntityRegister> list = new List<IEntityRegister>();
-                if (group.Key == null || group.Key == typeof(DefaultDbContext))
-                {
-                    list.AddRange(group);
-                }
-                else
-                {
-                    list = group.ToList();
-                }
-
-                if (list.Count > 0)
-                {
-                    dict[key] = list.ToArray();
-                }
+                List<IEntityRegister> list = dict.ContainsKey(key) ? dict[key].ToList() : new List<IEntityRegister>();
+                list.AddRange(group);
+                dict[key] = list.ToArray();
             }
 
             //添加框架的一些默认实体的实体映射信息（如果不存在）

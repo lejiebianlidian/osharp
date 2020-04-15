@@ -8,21 +8,19 @@
 // -----------------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
+using Microsoft.OpenApi.Models;
+
 using OSharp.AspNetCore;
 using OSharp.Core.Packs;
 using OSharp.Exceptions;
 using OSharp.Extensions;
-
-using Swashbuckle.AspNetCore.Swagger;
 
 
 namespace OSharp.Swagger
@@ -30,6 +28,7 @@ namespace OSharp.Swagger
     /// <summary>
     /// Swagger模块基类
     /// </summary>
+    [DependsOnPacks(typeof(AspNetCorePack))]
     public abstract class SwaggerPackBase : AspOsharpPack
     {
         /// <summary>
@@ -51,11 +50,6 @@ namespace OSharp.Swagger
         public override IServiceCollection AddServices(IServiceCollection services)
         {
             IConfiguration configuration = services.GetConfiguration();
-            bool enabled = configuration["OSharp:Swagger:Enabled"].CastTo(false);
-            if (!enabled)
-            {
-                return services;
-            }
 
             string url = configuration["OSharp:Swagger:Url"];
             if (string.IsNullOrEmpty(url))
@@ -69,22 +63,29 @@ namespace OSharp.Swagger
             services.AddMvcCore().AddApiExplorer();
             services.AddSwaggerGen(options =>
             {
-                options.SwaggerDoc($"v{version}", new Info() { Title = title, Version = $"v{version}" });
+                options.SwaggerDoc($"v{version}", new OpenApiInfo() { Title = title, Version = $"{version}" });
+
                 Directory.GetFiles(AppDomain.CurrentDomain.BaseDirectory, "*.xml").ToList().ForEach(file =>
                 {
                     options.IncludeXmlComments(file);
                 });
                 //权限Token
-                options.AddSecurityDefinition("Bearer", new ApiKeyScheme()
+                options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme()
                 {
                     Description = "请输入带有Bearer的Token，形如 “Bearer {Token}” ",
                     Name = "Authorization",
-                    In = "header",
-                    Type = "apiKey"
+                    In = ParameterLocation.Header,
+                    Type = SecuritySchemeType.ApiKey
                 });
-                options.AddSecurityRequirement(new Dictionary<string, IEnumerable<string>>()
+                options.AddSecurityRequirement(new OpenApiSecurityRequirement
                 {
-                    { "Bearer", Enumerable.Empty<string>() }
+                    {
+                        new OpenApiSecurityScheme
+                        {
+                            Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "oauth2" }
+                        },
+                        new[] { "readAccess", "writeAccess" }
+                    }
                 });
             });
 
@@ -98,11 +99,6 @@ namespace OSharp.Swagger
         public override void UsePack(IApplicationBuilder app)
         {
             IConfiguration configuration = app.ApplicationServices.GetService<IConfiguration>();
-            bool enabled = configuration["OSharp:Swagger:Enabled"].CastTo(false);
-            if (!enabled)
-            {
-                return;
-            }
 
             app.UseSwagger().UseSwaggerUI(options =>
             {
@@ -116,6 +112,7 @@ namespace OSharp.Swagger
                     options.IndexStream = () => GetType().Assembly.GetManifestResourceStream("OSharp.Swagger.index.html");
                 }
             });
+
             IsEnabled = true;
         }
     }

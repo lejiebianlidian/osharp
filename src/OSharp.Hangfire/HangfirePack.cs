@@ -9,8 +9,6 @@
 
 using System.ComponentModel;
 
-using OSharp.Core.Packs;
-
 
 namespace OSharp.Hangfire
 {
@@ -18,6 +16,6 @@ namespace OSharp.Hangfire
     /// Hangfire 后台任务模块
     /// </summary>
     [Description("Hangfire后台任务模块")]
-    public class HangfirePack : HangfirePackCore
+    public class HangfirePack : HangfirePackBase
     { }
 }

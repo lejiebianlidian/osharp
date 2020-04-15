@@ -8,24 +8,19 @@
 // -----------------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
-using OSharp.Audits;
 using OSharp.Collections;
-using OSharp.Core.EntityInfos;
-using OSharp.Core.Functions;
+using OSharp.Core.Options;
 using OSharp.Data;
-using OSharp.Dependency;
 using OSharp.Exceptions;
 
 
@@ -71,6 +66,7 @@ namespace OSharp.Entity
         /// <summary>
         /// 执行指定的Sql语句
         /// </summary>
+        [Obsolete("使用 ExecuteSqlRaw 代替")]
         public static int ExecuteSqlCommand(this IDbContext dbContext, string sql, params object[] parameters)
         {
             if (!(dbContext is DbContext context))
@@ -83,6 +79,7 @@ namespace OSharp.Entity
         /// <summary>
         /// 异步执行指定的Sql语句
         /// </summary>
+        [Obsolete("使用 ExecuteSqlRawAsync 代替")]
         public static Task<int> ExecuteSqlCommandAsync(this IDbContext dbContext, string sql, params object[] parameters)
         {
             if (!(dbContext is DbContext context))
@@ -90,6 +87,73 @@ namespace OSharp.Entity
                 throw new OsharpException($"参数dbContext类型为“{dbContext.GetType()}”，不能转换为 DbContext");
             }
             return context.Database.ExecuteSqlCommandAsync(new RawSqlString(sql), parameters);
+        }
+
+        /// <summary>
+        /// 执行指定的Sql语句
+        /// </summary>
+        public static int ExecuteSqlRaw(this IDbContext dbContext, string sql, params object[] parameters)
+        {
+            if (!(dbContext is DbContext context))
+            {
+                throw new OsharpException($"参数dbContext类型为“{dbContext.GetType()}”，不能转换为 DbContext");
+            }
+            return context.Database.ExecuteSqlRaw(sql, parameters);
+        }
+
+        /// <summary>
+        /// 异步执行指定的Sql语句
+        /// </summary>
+        public static Task<int> ExecuteSqlRawAsync(this IDbContext dbContext, string sql, params object[] parameters)
+        {
+            if (!(dbContext is DbContext context))
+            {
+                throw new OsharpException($"参数dbContext类型为“{dbContext.GetType()}”，不能转换为 DbContext");
+            }
+            return context.Database.ExecuteSqlRawAsync(sql, parameters);
+        }
+
+        /// <summary>
+        /// 执行指定的格式化Sql语句
+        /// </summary>
+        public static int ExecuteSqlInterpolated(this IDbContext dbContext, FormattableString sql)
+        {
+            if (!(dbContext is DbContext context))
+            {
+                throw new OsharpException($"参数dbContext类型为“{dbContext.GetType()}”，不能转换为 DbContext");
+            }
+            return context.Database.ExecuteSqlInterpolated(sql);
+        }
+
+        /// <summary>
+        /// 异步执行指定的格式化Sql语句
+        /// </summary>
+        public static Task<int> ExecuteSqlInterpolatedAsync(this IDbContext dbContext, FormattableString sql)
+        {
+            if (!(dbContext is DbContext context))
+            {
+                throw new OsharpException($"参数dbContext类型为“{dbContext.GetType()}”，不能转换为 DbContext");
+            }
+            return context.Database.ExecuteSqlInterpolatedAsync(sql);
+        }
+
+        /// <summary>
+        /// 获取实体上下文所属的数据库类型
+        /// </summary>
+        public static DatabaseType GetDatabaseType(this IDbContext dbContext)
+        {
+            if (!(dbContext is DbContext context))
+            {
+                throw new OsharpException($"参数dbContext类型为“{dbContext.GetType()}”，不能转换为 DbContext");
+            }
+
+            OsharpOptions options = context.GetService<IOptions<OsharpOptions>>()?.Value;
+            if (options != null)
+            {
+                return options.DbContexts.First(m => m.Value.DbContextType == context.GetType()).Value.DatabaseType;
+            }
+
+            return DatabaseType.SqlServer;
         }
 
         /// <summary>

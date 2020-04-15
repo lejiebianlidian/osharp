@@ -44,6 +44,9 @@ namespace OSharp.AutoMapper
         public override IServiceCollection AddServices(IServiceCollection services)
         {
             services.TryAddSingleton<MapperConfigurationExpression>(new MapperConfigurationExpression());
+            services.TryAddSingleton<IMapFromAttributeTypeFinder, MapFromAttributeTypeFinder>();
+            services.TryAddSingleton<IMapToAttributeTypeFinder, MapToAttributeTypeFinder>();
+            services.AddSingleton<IMapTuple, MapTupleProfile>();
 
             return services;
         }
@@ -71,9 +74,9 @@ namespace OSharp.AutoMapper
                 config.CreateMaps(cfg);
             }
 
-            Mapper.Initialize(cfg);
+            MapperConfiguration configuration = new MapperConfiguration(cfg);
 
-            IMapper mapper = provider.GetService<IMapper>();
+            IMapper mapper = new AutoMapperMapper(configuration);
             MapperExtensions.SetMapper(mapper);
 
             IsEnabled = true;

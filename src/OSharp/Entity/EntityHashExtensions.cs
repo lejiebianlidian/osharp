@@ -19,7 +19,6 @@ using Microsoft.Extensions.Logging;
 using OSharp.Collections;
 using OSharp.Core.Data;
 using OSharp.Core.Systems;
-using OSharp.Data;
 using OSharp.Extensions;
 
 
@@ -50,7 +49,8 @@ namespace OSharp.Entity
                 logger.LogInformation($"{hashes.Length}条基础数据“{entityType}”的内容签名 {hash} 与上次相同，取消数据库同步");
                 return false;
             }
-            OperationResult result = store.CreateOrUpdateKeyValue(key, hash).Result;
+
+            store.CreateOrUpdateKeyValue(key, hash).GetAwaiter().GetResult();
             logger.LogInformation($"{hashes.Length}条基础数据“{entityType}”的内容签名 {hash} 与上次 {keyValue?.Value} 不同，将进行数据库同步");
             return true;
         }
